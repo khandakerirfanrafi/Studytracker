@@ -151,7 +151,7 @@
 
         .floating-window {
             position: fixed; bottom: 30px; right: 30px; width: 220px;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(15, 23, 42, 0.9);
             backdrop-filter: blur(15px) saturate(180%);
             -webkit-backdrop-filter: blur(15px) saturate(180%);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -162,7 +162,6 @@
             overflow: hidden;
         }
         .floating-window.active { display: block; }
-        .floating-window:active { cursor: grabbing; background: rgba(255, 255, 255, 0.1); }
 
         .mini-tasks-container {
             margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);
@@ -195,9 +194,9 @@
             border: none; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;
         }
 
-        /* Hidden video for PiP */
         #pipVideo {
             position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+            bottom: 0; left: 0;
         }
 
         @media (max-width: 1024px) { .main-container { grid-template-columns: 1fr; } }
@@ -206,7 +205,7 @@
 <body>
 
     <canvas id="confettiCanvas"></canvas>
-    <!-- Hidden Elements for PiP -->
+    <!-- Elements for Always on Top Floating Display -->
     <video id="pipVideo" autoplay muted playsinline></video>
     <canvas id="pipCanvas" width="300" height="150" style="display:none;"></canvas>
 
@@ -336,10 +335,10 @@
             
             <div style="display: flex; gap: 5px;">
                 <button class="btn-primary" style="flex: 1; padding: 0.5rem; background: rgba(6, 182, 212, 0.6);" onclick="app.toggleTimer()" id="floatPlay">START</button>
-                <!-- Popup PiP Button -->
-                <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px; background: #06b6d4; border: none;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺 FLOAT</button>
+                <!-- POPUP PIP BUTTON -->
+                <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px; background: #06b6d4; border: none; font-weight: 800;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺 FLOAT</button>
             </div>
-            <p style="font-size: 8px; color: #94a3b8; margin-top: 8px;">Click 📺 to stay on screen when minimized</p>
+            <p style="font-size: 8px; color: #94a3b8; margin-top: 10px; line-height: 1.2;">Click 📺 to stay visible when browser is minimized</p>
         </div>
         <div id="miniTasksSection" class="mini-tasks-container">
             <div id="miniTaskList"></div>
@@ -403,36 +402,37 @@
             syncStreak(); loadLocalData();
         };
 
-        // PiP Frame update
+        // PiP Frame update logic
         const pipCtx = els.pipCanvas.getContext('2d');
         function updatePiP() {
             if (!document.pictureInPictureElement) return;
             const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
             const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
             
-            // Background
+            // Clear Background
             pipCtx.fillStyle = '#020617';
             pipCtx.fillRect(0, 0, 300, 150);
             
-            // Accent Circle Glow
+            // Draw Focus Ring (Glowing)
             if (timer.isRunning) {
                 pipCtx.strokeStyle = '#06b6d4';
-                pipCtx.lineWidth = 4;
+                pipCtx.lineWidth = 6;
                 pipCtx.beginPath();
-                pipCtx.arc(150, 75, 65, 0, Math.PI * 2);
+                pipCtx.arc(150, 75, 60, 0, Math.PI * 2);
                 pipCtx.stroke();
             }
 
-            // Timer Text
+            // Draw Timer Text
             pipCtx.fillStyle = '#f8fafc';
-            pipCtx.font = 'bold 70px monospace';
+            pipCtx.font = 'bold 75px monospace';
             pipCtx.textAlign = 'center';
-            pipCtx.fillText(`${m}:${s}`, 150, 85);
+            pipCtx.textBaseline = 'middle';
+            pipCtx.fillText(`${m}:${s}`, 150, 75);
             
-            // Subject Text
+            // Draw Subject Name
             pipCtx.fillStyle = '#94a3b8';
-            pipCtx.font = 'bold 16px Arial';
-            pipCtx.fillText(timer.sub.toUpperCase(), 150, 125);
+            pipCtx.font = 'bold 18px Arial';
+            pipCtx.fillText(timer.sub.toUpperCase(), 150, 130);
             
             requestAnimationFrame(updatePiP);
         }
@@ -505,16 +505,23 @@
                     if (document.pictureInPictureElement) {
                         await document.exitPictureInPicture();
                     } else {
-                        // Initialize PiP stream
-                        const stream = els.pipCanvas.captureStream(10);
-                        els.pipVideo.srcObject = stream;
+                        // Create high-quality stream
+                        if (!els.pipVideo.srcObject) {
+                            const stream = els.pipCanvas.captureStream(30);
+                            els.pipVideo.srcObject = stream;
+                        }
                         
-                        // Wait for stream to be ready
-                        await new Promise(r => els.pipVideo.onloadedmetadata = r);
-                        await els.pipVideo.play();
-                        
-                        await els.pipVideo.requestPictureInPicture();
+                        // Kickstart drawing
                         updatePiP();
+                        
+                        // Wait for stream to stabilize
+                        await new Promise(resolve => {
+                            if (els.pipVideo.readyState >= 2) resolve();
+                            else els.pipVideo.onloadeddata = resolve;
+                        });
+
+                        await els.pipVideo.play();
+                        await els.pipVideo.requestPictureInPicture();
                     }
                 } catch (e) {
                     console.error("PiP failed", e);
@@ -627,22 +634,16 @@
 
         async function startApp() {
             const els = { authDot: document.getElementById('authDot'), authText: document.getElementById('authText'), retryBtn: document.getElementById('retrySyncBtn') };
-            
             if (!navigator.onLine) { window.switchToLocalMode("Local Mode (Offline)"); return; }
-            
             window.connTimeout = setTimeout(() => { if (!window.user && !window.isLocalMode) { els.retryBtn.style.display = "inline-block"; els.authText.innerText = "Sync Hanging..."; } }, 5000);
-
             try {
                 const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
                 const { getAuth, signInAnonymously, onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
                 const fStore = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-                
                 Object.assign(window.firebaseFns, fStore, { onAuthStateChanged });
-
                 const fbApp = initializeApp(userFirebaseConfig);
                 const auth = getAuth(fbApp); 
                 window.db = fStore.getFirestore(fbApp);
-
                 onAuthStateChanged(auth, (u) => {
                     if (u) {
                         clearTimeout(window.connTimeout);
@@ -654,9 +655,7 @@
                         loadRealtimeData(u);
                     }
                 });
-
                 await signInAnonymously(auth).catch(() => window.switchToLocalMode("Auth Error"));
-
             } catch (err) {
                 window.switchToLocalMode("Local Mode (Sync Disabled)");
             }
@@ -670,7 +669,6 @@
             onSnapshot(collection(window.db, 'artifacts', appId, 'users', currentUser.uid, 'subjects'), (s) => { const subs = []; s.forEach(d => subs.push({ ...d.data(), id: d.id })); renderSubjects(subs); }, errorFn);
             onSnapshot(collection(window.db, 'artifacts', appId, 'users', currentUser.uid, 'history'), (s) => { const hist = []; s.forEach(d => hist.push({ ...d.data(), id: d.id })); renderHistory(hist); }, errorFn);
         }
-
         startApp();
     </script>
 </body>

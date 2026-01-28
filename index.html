@@ -410,7 +410,8 @@
             openFloatingWindow: async () => {
                 if ('documentPictureInPicture' in window) {
                     try {
-                        pipWindow = await window.documentPictureInPicture.requestWindow({ width: 300, height: 450 });
+                        // Start with a small size
+                        pipWindow = await window.documentPictureInPicture.requestWindow({ width: 300, height: 200 });
                         
                         // Copy styles
                         [...document.styleSheets].forEach((styleSheet) => {
@@ -431,14 +432,15 @@
 
                         const content = pipWindow.document.createElement('div');
                         content.innerHTML = `
-                            <div style="text-align: center; margin-bottom: 15px;">
+                            <div id="pip-header" style="text-align: center; cursor: pointer; user-select: none;">
                                 <div id="pip-sub" style="font-size: 10px; color: #06b6d4; font-weight: 800; margin-bottom: 5px;">${timer.sub.toUpperCase()}</div>
                                 <div id="pip-display" style="font-family: 'JetBrains Mono', monospace; font-size: 55px; font-weight: 700; color: white; line-height: 1;">${els.display.innerText}</div>
+                                <div style="font-size: 8px; color: #94a3b8; margin-top: 5px;">Double click to expand tasks</div>
                                 <div style="margin-top: 15px; display: flex; gap: 8px; justify-content: center;">
                                     <button id="pip-toggle" style="background: #06b6d4; border: none; color: white; padding: 8px 20px; border-radius: 50px; font-weight: 700; cursor: pointer; font-size: 12px;">START</button>
                                 </div>
                             </div>
-                            <div id="pip-tasks-section" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                            <div id="pip-tasks-section" style="display: none; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                                 <div style="font-size: 10px; color: #94a3b8; margin-bottom: 10px; font-weight: 800; letter-spacing: 1px;">QUICK TASKS</div>
                                 <div id="pip-task-list"></div>
                             </div>
@@ -446,7 +448,16 @@
                         pipWindow.document.body.appendChild(content);
 
                         // Attach Event Listeners
-                        pipWindow.document.getElementById('pip-toggle').onclick = () => window.app.toggleTimer();
+                        pipWindow.document.getElementById('pip-toggle').onclick = (e) => { e.stopPropagation(); window.app.toggleTimer(); };
+                        
+                        // TOGGLE EXPAND LOGIC (Like Mini Mode)
+                        pipWindow.document.getElementById('pip-header').ondblclick = () => {
+                            const taskSec = pipWindow.document.getElementById('pip-tasks-section');
+                            const isExpanded = taskSec.style.display === 'block';
+                            taskSec.style.display = isExpanded ? 'none' : 'block';
+                            
+                            // Window resize hints (Document PiP windows are user-resizable, but we can update content)
+                        };
                         
                         // Initial Task Load for PiP
                         renderTasks(lastLoadedTasks);

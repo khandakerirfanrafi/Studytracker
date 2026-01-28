@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AKTA - Pro Study Tracker & Streak</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- PWA Manifest (Data URI for basic metadata, though Service Worker is removed for stability) -->
+    <link rel="manifest" href='data:application/json,{"name":"AKTA Study Pro","short_name":"AKTA","start_url":".","display":"standalone","background_color":"#020617","theme_color":"#06b6d4"}'>
+    <meta name="theme-color" content="#06b6d4">
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -143,7 +148,6 @@
         }
         .delete-btn:hover { opacity: 1; }
 
-        /* Floating Window */
         .floating-window {
             position: fixed; bottom: 30px; right: 30px; width: 220px;
             background: rgba(255, 255, 255, 0.05);
@@ -190,7 +194,6 @@
             border: none; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;
         }
 
-        /* Hidden Video for PiP Mode */
         #pipVideo {
             position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
         }
@@ -201,11 +204,9 @@
 <body>
 
     <canvas id="confettiCanvas"></canvas>
-    <!-- Video and Canvas for Floating PiP Mode -->
     <video id="pipVideo" autoplay muted playsinline></video>
     <canvas id="pipCanvas" width="300" height="150" style="display:none;"></canvas>
 
-    <!-- Notification Overlay -->
     <div id="notification-overlay" class="modal">
         <div style="text-align: center; background: var(--glass-bg); padding: 3rem; border-radius: 32px; border: 1px solid var(--accent); max-width: 350px;">
             <div style="font-size: 50px; margin-bottom: 1rem;">🔥</div>
@@ -215,7 +216,6 @@
         </div>
     </div>
 
-    <!-- Navbar -->
     <nav class="navbar">
         <div class="logo">
             <div class="logo-icon">🚀</div>
@@ -333,7 +333,6 @@
             
             <div style="display: flex; gap: 5px;">
                 <button class="btn-primary" style="flex: 1; padding: 0.5rem; background: rgba(6, 182, 212, 0.6);" onclick="app.toggleTimer()" id="floatPlay">START</button>
-                <!-- PiP Button -->
                 <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺</button>
             </div>
         </div>
@@ -369,108 +368,37 @@
     <audio id="beep" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
     <audio id="taskBeep" src="https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3" preload="auto"></audio>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- FIREBASE CONFIGURATION ---
-        const userFirebaseConfig = {
-            apiKey: "AIzaSyBPvkMBBPNBE81N8q0U2lH64VNCaNDirsc",
-            authDomain: "safelivebakerypos.firebaseapp.com",
-            projectId: "safelivebakerypos",
-            storageBucket: "safelivebakerypos.firebasestorage.app",
-            messagingSenderId: "158134703948",
-            appId: "1:158134703948:web:39cd3936bc622a86d861e9",
-            measurementId: "G-PQCZZCCBFC"
-        };
-
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userFirebaseConfig;
+    <script type="text/javascript">
+        // Global variables
+        window.user = null; window.db = null; window.auth = null; 
+        window.isLocalMode = false; window.connTimeout = null;
         const appId = 'akta-study-pro-final';
 
-        let user = null; let db = null; let isLocalMode = false; let connTimeout = null;
-        const getLocal = (key) => JSON.parse(localStorage.getItem(`akta_${key}`)) || [];
-        const saveLocal = (key, data) => localStorage.setItem(`akta_${key}`, JSON.stringify(data));
-
-        const quotes = ["Study now, be proud later.", "Dream it. Wish it. Do it.", "Stay focused and never give up."];
-        let timer = { mode: 'pomodoro', timeLeft: 25 * 60, initialSecs: 25 * 60, isRunning: false, intv: null, sub: 'General', goal: 120 };
-
+        const timer = { mode: 'pomodoro', timeLeft: 25 * 60, initialSecs: 25 * 60, isRunning: false, intv: null, sub: 'General', goal: 120 };
         const els = {
             display: document.getElementById('timerDisplay'), floatDisplay: document.getElementById('floatTimer'),
             circle: document.getElementById('mainCircle'), startBtn: document.getElementById('startBtn'),
             quote: document.getElementById('quoteDisplay'), streak: document.getElementById('streakVal'),
             canvas: document.getElementById('confettiCanvas'), miniTasks: document.getElementById('miniTasksSection'),
             authDot: document.getElementById('authDot'), authText: document.getElementById('authText'),
-            retryBtn: document.getElementById('retrySyncBtn'),
-            pipVideo: document.getElementById('pipVideo'),
+            retryBtn: document.getElementById('retrySyncBtn'), pipVideo: document.getElementById('pipVideo'),
             pipCanvas: document.getElementById('pipCanvas')
         };
 
+        const getLocal = (key) => JSON.parse(localStorage.getItem(`akta_${key}`)) || [];
+        const saveLocal = (key, data) => localStorage.setItem(`akta_${key}`, JSON.stringify(data));
+        const quotes = ["Study now, be proud later.", "Dream it. Wish it. Do it.", "Stay focused and never give up."];
+
+        window.firebaseFns = {};
+
         window.switchToLocalMode = (msg) => {
-            clearTimeout(connTimeout); isLocalMode = true;
+            clearTimeout(window.connTimeout); window.isLocalMode = true;
             els.authText.innerText = msg; els.authDot.style.background = "#f59e0b";
-            els.retryBtn.style.display = "none"; syncStreak(); loadLocalData();
+            els.retryBtn.style.display = "none";
+            syncStreak(); loadLocalData();
         };
-
-        const startApp = async () => {
-            connTimeout = setTimeout(() => { if (!user && !isLocalMode) { els.retryBtn.style.display = "inline-block"; els.authText.innerText = "Check Connection..."; } }, 7000);
-            if (!navigator.onLine) { switchToLocalMode("Local Mode (Offline)"); return; }
-            try {
-                const fbApp = initializeApp(firebaseConfig);
-                const auth = getAuth(fbApp); db = getFirestore(fbApp);
-                onAuthStateChanged(auth, (u) => { if (u) { clearTimeout(connTimeout); user = u; els.authDot.style.background = '#10b981'; els.authText.innerText = "Cloud Synced"; els.retryBtn.style.display = "none"; syncStreak(); loadRealtimeData(); } });
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await signInWithCustomToken(auth, __initial_auth_token); } 
-                else { await signInAnonymously(auth).catch(() => switchToLocalMode("Auth Error")); }
-            } catch (err) { switchToLocalMode("Sync Error"); }
-        };
-        startApp();
-
-        // PiP Floating Logic
-        const pipCtx = els.pipCanvas.getContext('2d');
-        function updatePiP() {
-            if (!document.pictureInPictureElement) return;
-            const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
-            const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
-            
-            // Draw to Canvas
-            pipCtx.fillStyle = '#020617';
-            pipCtx.fillRect(0, 0, 300, 150);
-            pipCtx.fillStyle = '#06b6d4';
-            pipCtx.font = 'bold 80px Courier New';
-            pipCtx.textAlign = 'center';
-            pipCtx.fillText(`${m}:${s}`, 150, 85);
-            pipCtx.font = 'bold 20px Arial';
-            pipCtx.fillText(timer.sub.toUpperCase(), 150, 125);
-            
-            requestAnimationFrame(updatePiP);
-        }
 
         window.app = {
-            togglePiP: async () => {
-                try {
-                    if (document.pictureInPictureElement) {
-                        await document.exitPictureInPicture();
-                    } else {
-                        // Create stream if not exists
-                        if (!els.pipVideo.srcObject) {
-                            const stream = els.pipCanvas.captureStream(30);
-                            els.pipVideo.srcObject = stream;
-                        }
-                        
-                        // Wait for metadata to be ready to avoid Error: Metadata not loaded
-                        await new Promise((resolve) => {
-                            if (els.pipVideo.readyState >= 1) resolve();
-                            else els.pipVideo.onloadedmetadata = resolve;
-                        });
-
-                        await els.pipVideo.play();
-                        await els.pipVideo.requestPictureInPicture();
-                        updatePiP();
-                    }
-                } catch (e) {
-                    console.error("PiP failed", e);
-                }
-            },
             updateUI: () => {
                 const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
                 const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
@@ -502,55 +430,63 @@
                 const dur = timer.mode === 'stopwatch' ? Math.floor(timer.timeLeft / 60) : Math.floor(timer.initialSecs / 60);
                 const date = new Date().toISOString().split('T')[0];
                 if (dur > 0) {
-                    if (isLocalMode) { const h = getLocal('history'); h.push({ subject: timer.sub, duration: dur, date: date, id: Date.now() }); saveLocal('history', h); incrementStreakLocal(); loadLocalData(); } 
-                    else if (user) { await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'history'), { subject: timer.sub, duration: dur, date: date, timestamp: serverTimestamp() }); incrementStreak(); }
+                    if (window.isLocalMode || !window.user) {
+                        const h = getLocal('history'); h.push({ subject: timer.sub, duration: dur, date: date, id: Date.now() }); saveLocal('history', h);
+                        incrementStreakLocal(); loadLocalData();
+                    } else if (window.firebaseFns.addDoc && window.db) {
+                        await window.firebaseFns.addDoc(window.firebaseFns.collection(window.db, 'artifacts', appId, 'users', window.user.uid, 'history'), { subject: timer.sub, duration: dur, date: date, timestamp: window.firebaseFns.serverTimestamp() });
+                        incrementStreakCloud();
+                    }
                 }
                 document.getElementById('notification-overlay').classList.add('active');
             },
             closeNotif: () => { document.getElementById('notification-overlay').classList.remove('active'); window.app.resetTimer(); },
             addTask: async () => {
                 const text = document.getElementById('taskInp').value.trim(); if (!text) return;
-                if (isLocalMode) { const t = getLocal('tasks'); t.push({ text, done: false, id: Date.now() }); saveLocal('tasks', t); loadLocalData(); } 
-                else if (user) { await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'), { text, done: false, createdAt: serverTimestamp() }); }
+                if (window.isLocalMode || !window.user) { const t = getLocal('tasks'); t.push({ text, done: false, id: Date.now() }); saveLocal('tasks', t); loadLocalData(); } 
+                else if (window.firebaseFns.addDoc && window.db) { await window.firebaseFns.addDoc(window.firebaseFns.collection(window.db, 'artifacts', appId, 'users', window.user.uid, 'tasks'), { text, done: false, createdAt: window.firebaseFns.serverTimestamp() }); }
                 document.getElementById('taskInp').value = '';
             },
-            deleteTask: async (id) => { if (isLocalMode) { saveLocal('tasks', getLocal('tasks').filter(t => t.id !== id)); loadLocalData(); } else if (user) { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', id)); } },
+            deleteTask: async (id) => { if (window.isLocalMode || !window.user) { saveLocal('tasks', getLocal('tasks').filter(t => t.id !== id)); loadLocalData(); } else if (window.firebaseFns.deleteDoc && window.db) { await window.firebaseFns.deleteDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'tasks', id)); } },
             saveSub: async () => {
                 const name = document.getElementById('newSubInp').value.toUpperCase().trim(); if (!name) return;
-                if (isLocalMode) { const s = getLocal('subjects'); s.push({ name, id: Date.now() }); saveLocal('subjects', s); loadLocalData(); } 
-                else if (user) { await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'subjects'), { name }); }
+                if (window.isLocalMode || !window.user) { const s = getLocal('subjects'); s.push({ name, id: Date.now() }); saveLocal('subjects', s); loadLocalData(); } 
+                else if (window.firebaseFns.addDoc && window.db) { await window.firebaseFns.addDoc(window.firebaseFns.collection(window.db, 'artifacts', appId, 'users', window.user.uid, 'subjects'), { name }); }
                 window.app.closeModals(); document.getElementById('newSubInp').value = '';
             },
-            deleteSub: async (id) => { if (isLocalMode) { saveLocal('subjects', getLocal('subjects').filter(s => s.id !== id)); loadLocalData(); } else if (user) { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'subjects', id)); } },
+            deleteSub: async (id) => { if (window.isLocalMode || !window.user) { saveLocal('subjects', getLocal('subjects').filter(s => s.id !== id)); loadLocalData(); } else if (window.firebaseFns.deleteDoc && window.db) { await window.firebaseFns.deleteDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'subjects', id)); } },
             selectSub: (name) => { timer.sub = name; document.getElementById('activeSub').innerText = name; document.getElementById('floatSub').innerText = name; document.querySelectorAll('.subject-item').forEach(e => e.classList.toggle('active', e.dataset.name === name)); },
             showSettings: () => { document.getElementById('goalInp').value = timer.goal; document.getElementById('setModal').classList.add('active'); },
-            saveSettings: () => { const val = parseInt(document.getElementById('goalInp').value); if (val > 0) timer.goal = val; window.app.closeModals(); if(isLocalMode) loadLocalData(); },
+            saveSettings: () => { const val = parseInt(document.getElementById('goalInp').value); if (val > 0) timer.goal = val; window.app.closeModals(); loadLocalData(); },
             openSubModal: () => document.getElementById('subModal').classList.add('active'),
             closeModals: () => document.querySelectorAll('.modal').forEach(m => m.classList.remove('active')),
-            closeMini: () => { document.getElementById('floatWin').classList.remove('active'); }
+            closeMini: () => { document.getElementById('floatWin').classList.remove('active'); },
+            togglePiP: async () => {
+                try {
+                    if (document.pictureInPictureElement) { await document.exitPictureInPicture(); } 
+                    else {
+                        if (!els.pipVideo.srcObject) { const stream = els.pipCanvas.captureStream(30); els.pipVideo.srcObject = stream; }
+                        await new Promise((r) => { if (els.pipVideo.readyState >= 1) r(); else els.pipVideo.onloadedmetadata = r; });
+                        await els.pipVideo.play(); await els.pipVideo.requestPictureInPicture(); updatePiP();
+                    }
+                } catch (e) { console.error("PiP failed", e); }
+            }
         };
 
-        const confetti = {
-            particles: [], colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'], isRunning: false, ctx: null,
-            init() { this.ctx = document.getElementById('confettiCanvas').getContext('2d'); window.addEventListener('resize', () => this.resize()); this.resize(); },
-            resize() { const c = document.getElementById('confettiCanvas'); c.width = window.innerWidth; c.height = window.innerHeight; },
-            spawn() { this.particles = []; for (let i = 0; i < 80; i++) { this.particles.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight - window.innerHeight, size: Math.random() * 8 + 4, color: this.colors[Math.floor(Math.random() * this.colors.length)], speed: Math.random() * 3 + 2, angle: Math.random() * 360, rotationSpeed: Math.random() * 10 - 5 }); } },
-            start() { if (this.isRunning) return; this.spawn(); this.isRunning = true; this.animate(); setTimeout(() => this.isRunning = false, 3500); },
-            animate() { if (!this.isRunning && this.particles.length === 0) { this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); return; } this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); for (let i = 0; i < this.particles.length; i++) { let p = this.particles[i]; p.y += p.speed; p.angle += p.rotationSpeed; this.ctx.save(); this.ctx.translate(p.x, p.y); this.ctx.rotate(p.angle * Math.PI / 180); this.ctx.fillStyle = p.color; this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); this.ctx.restore(); if (p.y > window.innerHeight) { if (this.isRunning) { p.y = -20; p.x = Math.random() * window.innerWidth; } else { this.particles.splice(i, 1); i--; } } } requestAnimationFrame(() => this.animate()); }
-        };
-        confetti.init();
+        const pipCtx = els.pipCanvas.getContext('2d');
+        function updatePiP() {
+            if (!document.pictureInPictureElement) return;
+            const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
+            const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
+            pipCtx.fillStyle = '#020617'; pipCtx.fillRect(0, 0, 300, 150);
+            pipCtx.fillStyle = '#06b6d4'; pipCtx.font = 'bold 80px Courier New'; pipCtx.textAlign = 'center'; pipCtx.fillText(`${m}:${s}`, 150, 85);
+            pipCtx.font = 'bold 20px Arial'; pipCtx.fillText(timer.sub.toUpperCase(), 150, 125);
+            requestAnimationFrame(updatePiP);
+        }
 
-        const floatWin = document.getElementById('floatWin');
-        let isMoving = false, ox, oy;
-        floatWin.onmousedown = (e) => { if(e.target.tagName === 'BUTTON') return; isMoving = true; ox = e.clientX - floatWin.offsetLeft; oy = e.clientY - floatWin.offsetTop; };
-        document.onmousemove = (e) => { if (!isMoving) return; floatWin.style.left = (e.clientX - ox) + 'px'; floatWin.style.top = (e.clientY - oy) + 'px'; floatWin.style.bottom = 'auto'; floatWin.style.right = 'auto'; };
-        document.onmouseup = () => isMoving = false;
-        floatWin.ondblclick = () => { const isExp = els.miniTasks.classList.toggle('expanded'); floatWin.style.height = isExp ? '360px' : 'auto'; };
-        document.getElementById('miniModeBtn').onclick = () => floatWin.classList.toggle('active');
-
-        async function syncStreak() {
-            if (isLocalMode) { els.streak.innerText = (JSON.parse(localStorage.getItem('akta_streak')) || { count: 0 }).count; } 
-            else if (user) { const snap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'streak')).catch(()=>null); if (snap && snap.exists()) els.streak.innerText = snap.data().count; }
+        function syncStreak() {
+            if (window.isLocalMode || !window.user) { els.streak.innerText = (JSON.parse(localStorage.getItem('akta_streak')) || { count: 0 }).count; } 
+            else if (window.firebaseFns.getDoc && window.db) { window.firebaseFns.getDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'profile', 'streak')).then(snap => { if (snap.exists()) els.streak.innerText = snap.data().count; }); }
         }
 
         function incrementStreakLocal() {
@@ -559,15 +495,15 @@
             if (s.lastDate !== today) { s.count++; s.lastDate = today; localStorage.setItem('akta_streak', JSON.stringify(s)); els.streak.innerText = s.count; }
         }
 
-        async function incrementStreak() {
-            if (!user) return;
-            const streakRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'streak');
-            const snap = await getDoc(streakRef).catch(()=>null);
+        async function incrementStreakCloud() {
+            if (!window.user || !window.db) return;
+            const streakRef = window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'profile', 'streak');
+            const snap = await window.firebaseFns.getDoc(streakRef).catch(()=>null);
             const today = new Date().toISOString().split('T')[0];
             if (snap && snap.exists()) {
                 const data = snap.data();
-                if (data.lastDate !== today) { await setDoc(streakRef, { count: (data.count || 0) + 1, lastDate: today }); els.streak.innerText = data.count + 1; }
-            } else { await setDoc(streakRef, { count: 1, lastDate: today }); els.streak.innerText = 1; }
+                if (data.lastDate !== today) { await window.firebaseFns.setDoc(streakRef, { count: (data.count || 0) + 1, lastDate: today }); els.streak.innerText = data.count + 1; }
+            } else { await window.firebaseFns.setDoc(streakRef, { count: 1, lastDate: today }); els.streak.innerText = 1; }
         }
 
         function renderTasks(tasks) {
@@ -579,11 +515,10 @@
                     if(isMini) div.style.background = "rgba(255,255,255,0.1)";
                     div.innerHTML = `<span style="flex:1; font-size:${isMini ? '11px' : '13px'}; cursor:pointer; color:white; font-weight:500; ${t.done ? 'text-decoration:line-through; opacity:0.5' : ''}">${t.text}</span>${!isMini ? '<button class="delete-btn">×</button>' : ''}`;
                     div.onclick = async () => {
-                        const sfx = document.getElementById('taskBeep'); 
-                        if (!t.done) { confetti.start(); sfx.currentTime = 0; sfx.play().catch(()=>{}); }
+                        if (!t.done) { confetti.start(); document.getElementById('taskBeep').currentTime = 0; document.getElementById('taskBeep').play().catch(()=>{}); }
                         t.done = !t.done;
-                        if (isLocalMode) { saveLocal('tasks', tasks); loadLocalData(); }
-                        else await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', t.id), { done: t.done });
+                        if (window.isLocalMode || !window.user) { saveLocal('tasks', tasks); loadLocalData(); }
+                        else if (window.firebaseFns.updateDoc && window.db) await window.firebaseFns.updateDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'tasks', t.id), { done: t.done });
                     };
                     if(!isMini) div.querySelector('.delete-btn').onclick = (e) => { e.stopPropagation(); window.app.deleteTask(t.id); };
                     return div;
@@ -619,16 +554,86 @@
         }
 
         function loadLocalData() { renderTasks(getLocal('tasks')); renderSubjects(getLocal('subjects')); renderHistory(getLocal('history')); }
-        function loadRealtimeData() {
-            if(!db || !user) return;
-            onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'), orderBy('createdAt', 'desc')), (s) => { const tasks = []; s.forEach(d => tasks.push({ ...d.data(), id: d.id })); renderTasks(tasks); });
-            onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'subjects'), (s) => { const subs = []; s.forEach(d => subs.push({ ...d.data(), id: d.id })); renderSubjects(subs); });
-            onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'history'), (s) => { const hist = []; s.forEach(d => hist.push({ ...d.data(), id: d.id })); renderHistory(hist); });
-        }
-        window.app.updateUI();
+
+        window.onload = () => {
+            loadLocalData(); window.app.updateUI();
+            const floatWin = document.getElementById('floatWin');
+            let isMoving = false, ox, oy;
+            floatWin.onmousedown = (e) => { if(e.target.tagName === 'BUTTON') return; isMoving = true; ox = e.clientX - floatWin.offsetLeft; oy = e.clientY - floatWin.offsetTop; };
+            document.onmousemove = (e) => { if (!isMoving) return; floatWin.style.left = (e.clientX - ox) + 'px'; floatWin.style.top = (e.clientY - oy) + 'px'; floatWin.style.bottom = 'auto'; floatWin.style.right = 'auto'; };
+            document.onmouseup = () => isMoving = false;
+            floatWin.ondblclick = () => { const isExp = els.miniTasks.classList.toggle('expanded'); floatWin.style.height = isExp ? '360px' : 'auto'; };
+            document.getElementById('miniModeBtn').onclick = () => floatWin.classList.toggle('active');
+        };
+
+        const confetti = {
+            particles: [], colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'], isRunning: false, ctx: null,
+            init() { this.ctx = document.getElementById('confettiCanvas').getContext('2d'); window.addEventListener('resize', () => this.resize()); this.resize(); },
+            resize() { const c = document.getElementById('confettiCanvas'); c.width = window.innerWidth; c.height = window.innerHeight; },
+            spawn() { this.particles = []; for (let i = 0; i < 80; i++) { this.particles.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight - window.innerHeight, size: Math.random() * 8 + 4, color: this.colors[Math.floor(Math.random() * this.colors.length)], speed: Math.random() * 3 + 2, angle: Math.random() * 360, rotationSpeed: Math.random() * 10 - 5 }); } },
+            start() { if (this.isRunning) return; this.spawn(); this.isRunning = true; this.animate(); setTimeout(() => this.isRunning = false, 3500); },
+            animate() { if (!this.isRunning && this.particles.length === 0) { this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); return; } this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); for (let i = 0; i < this.particles.length; i++) { let p = this.particles[i]; p.y += p.speed; p.angle += p.rotationSpeed; this.ctx.save(); this.ctx.translate(p.x, p.y); this.ctx.rotate(p.angle * Math.PI / 180); this.ctx.fillStyle = p.color; this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); this.ctx.restore(); if (p.y > window.innerHeight) { if (this.isRunning) { p.y = -20; p.x = Math.random() * window.innerWidth; } else { this.particles.splice(i, 1); i--; } } } requestAnimationFrame(() => this.animate()); }
+        };
+        confetti.init();
     </script>
-</body>
-</html>
+
+    <script type="module">
+        const userFirebaseConfig = {
+            apiKey: "AIzaSyBPvkMBBPNBE81N8q0U2lH64VNCaNDirsc",
+            authDomain: "safelivebakerypos.firebaseapp.com",
+            projectId: "safelivebakerypos",
+            storageBucket: "safelivebakerypos.firebasestorage.app",
+            messagingSenderId: "158134703948",
+            appId: "1:158134703948:web:39cd3936bc622a86d861e9"
+        };
+
+        async function startApp() {
+            const els = { authDot: document.getElementById('authDot'), authText: document.getElementById('authText'), retryBtn: document.getElementById('retrySyncBtn') };
+            
+            if (!navigator.onLine) { window.switchToLocalMode("Local Mode (Offline)"); return; }
+            
+            window.connTimeout = setTimeout(() => { if (!window.user && !window.isLocalMode) { els.retryBtn.style.display = "inline-block"; els.authText.innerText = "Sync Hanging..."; } }, 5000);
+
+            try {
+                const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+                const { getAuth, signInAnonymously, onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+                const fStore = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                
+                Object.assign(window.firebaseFns, fStore, { onAuthStateChanged });
+
+                const fbApp = initializeApp(userFirebaseConfig);
+                const auth = getAuth(fbApp); 
+                window.db = fStore.getFirestore(fbApp);
+
+                onAuthStateChanged(auth, (u) => {
+                    if (u) {
+                        clearTimeout(window.connTimeout);
+                        window.user = u;
+                        els.authDot.style.background = '#10b981';
+                        els.authText.innerText = "Cloud Synced";
+                        els.retryBtn.style.display = "none";
+                        syncStreak();
+                        loadRealtimeData(u);
+                    }
+                });
+
+                await signInAnonymously(auth).catch(() => window.switchToLocalMode("Auth Error"));
+
+            } catch (err) {
+                window.switchToLocalMode("Local Mode (Sync Disabled)");
+            }
+        }
+
+        function loadRealtimeData(currentUser) {
+            if (!currentUser || !window.firebaseFns.collection || !window.db) return;
+            const { collection, query, orderBy, onSnapshot } = window.firebaseFns;
+            const errorFn = (err) => { if(err.code === 'permission-denied') window.switchToLocalMode("Cloud Permission Denied"); };
+            onSnapshot(query(collection(window.db, 'artifacts', appId, 'users', currentUser.uid, 'tasks'), orderBy('createdAt', 'desc')), (s) => { const tasks = []; s.forEach(d => tasks.push({ ...d.data(), id: d.id })); renderTasks(tasks); }, errorFn);
+            onSnapshot(collection(window.db, 'artifacts', appId, 'users', currentUser.uid, 'subjects'), (s) => { const subs = []; s.forEach(d => subs.push({ ...d.data(), id: d.id })); renderSubjects(subs); }, errorFn);
+            onSnapshot(collection(window.db, 'artifacts', appId, 'users', currentUser.uid, 'history'), (s) => { const hist = []; s.forEach(d => hist.push({ ...d.data(), id: d.id })); renderHistory(hist); }, errorFn);
+        }
+
+        startApp();
     </script>
 </body>
 </html>

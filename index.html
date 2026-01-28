@@ -205,7 +205,7 @@
 <body>
 
     <canvas id="confettiCanvas"></canvas>
-    <!-- Elements for Always on Top Floating Display -->
+    <!-- Always on Display Floating Elemets -->
     <video id="pipVideo" autoplay muted playsinline></video>
     <canvas id="pipCanvas" width="300" height="150" style="display:none;"></canvas>
 
@@ -333,12 +333,13 @@
             <div id="floatTimer" style="font-family: 'JetBrains Mono'; font-size: 38px; font-weight: 700; color: white; margin-bottom: 5px; text-shadow: 0 0 10px rgba(6,182,212,0.8);">25:00</div>
             <div id="floatSub" style="font-size: 9px; color: #e2e8f0; margin-bottom: 10px; font-weight: 600;">GENERAL</div>
             
-            <div style="display: flex; gap: 5px;">
-                <button class="btn-primary" style="flex: 1; padding: 0.5rem; background: rgba(6, 182, 212, 0.6);" onclick="app.toggleTimer()" id="floatPlay">START</button>
-                <!-- POPUP PIP BUTTON -->
-                <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px; background: #06b6d4; border: none; font-weight: 800;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺 FLOAT</button>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button class="btn-primary" style="padding: 0.5rem; background: rgba(6, 182, 212, 0.6);" onclick="app.toggleTimer()" id="floatPlay">START</button>
+                
+                <!-- PRO FLOATING BUTTON -->
+                <button class="btn-outline" style="padding: 0.6rem; border-radius: 12px; background: #10b981; border: none; font-weight: 800; color: white; box-shadow: 0 4px 10px rgba(16,185,129,0.3);" onclick="app.openFloatingWindow()">🚀 OPEN PRO FLOAT</button>
             </div>
-            <p style="font-size: 8px; color: #94a3b8; margin-top: 10px; line-height: 1.2;">Click 📺 to stay visible when browser is minimized</p>
+            <p style="font-size: 8px; color: #94a3b8; margin-top: 10px; line-height: 1.2;">Use 'PRO FLOAT' for a real window that stays on top when minimized.</p>
         </div>
         <div id="miniTasksSection" class="mini-tasks-container">
             <div id="miniTaskList"></div>
@@ -402,47 +403,69 @@
             syncStreak(); loadLocalData();
         };
 
-        // PiP Frame update logic
-        const pipCtx = els.pipCanvas.getContext('2d');
-        function updatePiP() {
-            if (!document.pictureInPictureElement) return;
-            const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
-            const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
-            
-            // Clear Background
-            pipCtx.fillStyle = '#020617';
-            pipCtx.fillRect(0, 0, 300, 150);
-            
-            // Draw Focus Ring (Glowing)
-            if (timer.isRunning) {
-                pipCtx.strokeStyle = '#06b6d4';
-                pipCtx.lineWidth = 6;
-                pipCtx.beginPath();
-                pipCtx.arc(150, 75, 60, 0, Math.PI * 2);
-                pipCtx.stroke();
-            }
-
-            // Draw Timer Text
-            pipCtx.fillStyle = '#f8fafc';
-            pipCtx.font = 'bold 75px monospace';
-            pipCtx.textAlign = 'center';
-            pipCtx.textBaseline = 'middle';
-            pipCtx.fillText(`${m}:${s}`, 150, 75);
-            
-            // Draw Subject Name
-            pipCtx.fillStyle = '#94a3b8';
-            pipCtx.font = 'bold 18px Arial';
-            pipCtx.fillText(timer.sub.toUpperCase(), 150, 130);
-            
-            requestAnimationFrame(updatePiP);
-        }
-
+        // Advanced Floating Window logic
+        let pipWindow = null;
         window.app = {
+            openFloatingWindow: async () => {
+                if ('documentPictureInPicture' in window) {
+                    try {
+                        pipWindow = await window.documentPictureInPicture.requestWindow({ width: 280, height: 200 });
+                        
+                        [...document.styleSheets].forEach((styleSheet) => {
+                            try {
+                                const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
+                                const style = document.createElement('style');
+                                style.textContent = cssRules;
+                                pipWindow.document.head.appendChild(style);
+                            } catch (e) {}
+                        });
+
+                        pipWindow.document.body.style.background = '#020617';
+                        pipWindow.document.body.style.margin = '0';
+                        pipWindow.document.body.style.display = 'flex';
+                        pipWindow.document.body.style.alignItems = 'center';
+                        pipWindow.document.body.style.justifyContent = 'center';
+                        pipWindow.document.body.style.overflow = 'hidden';
+
+                        const container = pipWindow.document.createElement('div');
+                        container.style.textAlign = 'center';
+                        container.innerHTML = `
+                            <div id="pip-sub" style="font-size: 10px; color: #06b6d4; font-weight: 800; margin-bottom: 5px;">${timer.sub.toUpperCase()}</div>
+                            <div id="pip-display" style="font-family: 'JetBrains Mono', monospace; font-size: 60px; font-weight: 700; color: white; line-height: 1;">${els.display.innerText}</div>
+                            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+                                <button id="pip-toggle" style="background: #06b6d4; border: none; color: white; padding: 6px 20px; border-radius: 50px; font-weight: 700; cursor: pointer;">START</button>
+                            </div>
+                        `;
+                        pipWindow.document.body.appendChild(container);
+
+                        pipWindow.document.getElementById('pip-toggle').onclick = () => window.app.toggleTimer();
+                        pipWindow.onpagehide = () => { pipWindow = null; };
+
+                    } catch (e) {
+                        console.error("Document PiP failed", e);
+                    }
+                } else {
+                    const left = screen.width - 300;
+                    const top = screen.height - 250;
+                    const popup = window.open("", "AKTA_POPUP", `width=250,height=180,left=${left},top=${top},menubar=no,status=no,titlebar=no`);
+                    if(popup) {
+                        popup.document.body.innerHTML = `<h1 style="font-family:sans-serif; text-align:center; margin-top:40px;">${els.display.innerText}</h1><p style="text-align:center;">Always on Top requires modern browser.</p>`;
+                    }
+                }
+            },
             updateUI: () => {
                 const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
                 const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
-                els.display.innerText = `${m}:${s}`; els.floatDisplay.innerText = `${m}:${s}`;
-                document.title = `${m}:${s} | Focus`;
+                const timeStr = `${m}:${s}`;
+                els.display.innerText = timeStr; els.floatDisplay.innerText = timeStr;
+                document.title = `${timeStr} | Focus`;
+
+                if (pipWindow) {
+                    const pipDisp = pipWindow.document.getElementById('pip-display');
+                    const pipToggle = pipWindow.document.getElementById('pip-toggle');
+                    if(pipDisp) pipDisp.innerText = timeStr;
+                    if(pipToggle) pipToggle.innerText = timer.isRunning ? "PAUSE" : "START";
+                }
             },
             setMode: (m) => {
                 timer.mode = m; timer.isRunning = false; clearInterval(timer.intv);
@@ -462,6 +485,7 @@
                     els.quote.innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
                     timer.intv = setInterval(() => { if (timer.mode === 'stopwatch') timer.timeLeft++; else { if (timer.timeLeft > 0) timer.timeLeft--; else window.app.complete(); } window.app.updateUI(); }, 1000);
                 }
+                window.app.updateUI();
             },
             resetTimer: () => { clearInterval(timer.intv); timer.isRunning = false; els.circle.classList.remove('running'); timer.timeLeft = timer.mode === 'stopwatch' ? 0 : timer.initialSecs; els.startBtn.innerText = "START"; window.app.updateUI(); },
             complete: async () => {
@@ -499,34 +523,7 @@
             saveSettings: () => { const val = parseInt(document.getElementById('goalInp').value); if (val > 0) timer.goal = val; window.app.closeModals(); loadLocalData(); },
             openSubModal: () => document.getElementById('subModal').classList.add('active'),
             closeModals: () => document.querySelectorAll('.modal').forEach(m => m.classList.remove('active')),
-            closeMini: () => { document.getElementById('floatWin').classList.remove('active'); },
-            togglePiP: async () => {
-                try {
-                    if (document.pictureInPictureElement) {
-                        await document.exitPictureInPicture();
-                    } else {
-                        // Create high-quality stream
-                        if (!els.pipVideo.srcObject) {
-                            const stream = els.pipCanvas.captureStream(30);
-                            els.pipVideo.srcObject = stream;
-                        }
-                        
-                        // Kickstart drawing
-                        updatePiP();
-                        
-                        // Wait for stream to stabilize
-                        await new Promise(resolve => {
-                            if (els.pipVideo.readyState >= 2) resolve();
-                            else els.pipVideo.onloadeddata = resolve;
-                        });
-
-                        await els.pipVideo.play();
-                        await els.pipVideo.requestPictureInPicture();
-                    }
-                } catch (e) {
-                    console.error("PiP failed", e);
-                }
-            }
+            closeMini: () => { document.getElementById('floatWin').classList.remove('active'); }
         };
 
         function syncStreak() {

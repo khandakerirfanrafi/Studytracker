@@ -6,9 +6,10 @@
     <title>AKTA - Pro Study Tracker & Streak</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     
-    <!-- PWA Manifest (Data URI for basic metadata, though Service Worker is removed for stability) -->
-    <link rel="manifest" href='data:application/json,{"name":"AKTA Study Pro","short_name":"AKTA","start_url":".","display":"standalone","background_color":"#020617","theme_color":"#06b6d4"}'>
+    <!-- PWA Metadata -->
+    <link rel="manifest" id="pwa-manifest">
     <meta name="theme-color" content="#06b6d4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -194,6 +195,7 @@
             border: none; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;
         }
 
+        /* Hidden video for PiP */
         #pipVideo {
             position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
         }
@@ -204,14 +206,15 @@
 <body>
 
     <canvas id="confettiCanvas"></canvas>
+    <!-- Hidden Elements for PiP -->
     <video id="pipVideo" autoplay muted playsinline></video>
     <canvas id="pipCanvas" width="300" height="150" style="display:none;"></canvas>
 
     <div id="notification-overlay" class="modal">
         <div style="text-align: center; background: var(--glass-bg); padding: 3rem; border-radius: 32px; border: 1px solid var(--accent); max-width: 350px;">
             <div style="font-size: 50px; margin-bottom: 1rem;">🔥</div>
-            <h2 style="font-size: 24px;">Adik Mohon!</h2>
-            <p style="color: var(--text-secondary); margin: 1rem 0 2rem;">Apni ekta session sarthok bhabe sesh korechen. Carry on!</p>
+            <h2 style="font-size: 24px;">Shabash!</h2>
+            <p style="color: var(--text-secondary); margin: 1rem 0 2rem;">Apni ekta session sesh korechen. Carry on!</p>
             <button class="btn-primary" style="width: 100%;" onclick="app.closeNotif()">Alhamdulillah</button>
         </div>
     </div>
@@ -333,8 +336,10 @@
             
             <div style="display: flex; gap: 5px;">
                 <button class="btn-primary" style="flex: 1; padding: 0.5rem; background: rgba(6, 182, 212, 0.6);" onclick="app.toggleTimer()" id="floatPlay">START</button>
-                <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺</button>
+                <!-- Popup PiP Button -->
+                <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px; background: #06b6d4; border: none;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺 FLOAT</button>
             </div>
+            <p style="font-size: 8px; color: #94a3b8; margin-top: 8px;">Click 📺 to stay on screen when minimized</p>
         </div>
         <div id="miniTasksSection" class="mini-tasks-container">
             <div id="miniTaskList"></div>
@@ -397,6 +402,40 @@
             els.retryBtn.style.display = "none";
             syncStreak(); loadLocalData();
         };
+
+        // PiP Frame update
+        const pipCtx = els.pipCanvas.getContext('2d');
+        function updatePiP() {
+            if (!document.pictureInPictureElement) return;
+            const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
+            const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
+            
+            // Background
+            pipCtx.fillStyle = '#020617';
+            pipCtx.fillRect(0, 0, 300, 150);
+            
+            // Accent Circle Glow
+            if (timer.isRunning) {
+                pipCtx.strokeStyle = '#06b6d4';
+                pipCtx.lineWidth = 4;
+                pipCtx.beginPath();
+                pipCtx.arc(150, 75, 65, 0, Math.PI * 2);
+                pipCtx.stroke();
+            }
+
+            // Timer Text
+            pipCtx.fillStyle = '#f8fafc';
+            pipCtx.font = 'bold 70px monospace';
+            pipCtx.textAlign = 'center';
+            pipCtx.fillText(`${m}:${s}`, 150, 85);
+            
+            // Subject Text
+            pipCtx.fillStyle = '#94a3b8';
+            pipCtx.font = 'bold 16px Arial';
+            pipCtx.fillText(timer.sub.toUpperCase(), 150, 125);
+            
+            requestAnimationFrame(updatePiP);
+        }
 
         window.app = {
             updateUI: () => {
@@ -463,26 +502,25 @@
             closeMini: () => { document.getElementById('floatWin').classList.remove('active'); },
             togglePiP: async () => {
                 try {
-                    if (document.pictureInPictureElement) { await document.exitPictureInPicture(); } 
-                    else {
-                        if (!els.pipVideo.srcObject) { const stream = els.pipCanvas.captureStream(30); els.pipVideo.srcObject = stream; }
-                        await new Promise((r) => { if (els.pipVideo.readyState >= 1) r(); else els.pipVideo.onloadedmetadata = r; });
-                        await els.pipVideo.play(); await els.pipVideo.requestPictureInPicture(); updatePiP();
+                    if (document.pictureInPictureElement) {
+                        await document.exitPictureInPicture();
+                    } else {
+                        // Initialize PiP stream
+                        const stream = els.pipCanvas.captureStream(10);
+                        els.pipVideo.srcObject = stream;
+                        
+                        // Wait for stream to be ready
+                        await new Promise(r => els.pipVideo.onloadedmetadata = r);
+                        await els.pipVideo.play();
+                        
+                        await els.pipVideo.requestPictureInPicture();
+                        updatePiP();
                     }
-                } catch (e) { console.error("PiP failed", e); }
+                } catch (e) {
+                    console.error("PiP failed", e);
+                }
             }
         };
-
-        const pipCtx = els.pipCanvas.getContext('2d');
-        function updatePiP() {
-            if (!document.pictureInPictureElement) return;
-            const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
-            const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
-            pipCtx.fillStyle = '#020617'; pipCtx.fillRect(0, 0, 300, 150);
-            pipCtx.fillStyle = '#06b6d4'; pipCtx.font = 'bold 80px Courier New'; pipCtx.textAlign = 'center'; pipCtx.fillText(`${m}:${s}`, 150, 85);
-            pipCtx.font = 'bold 20px Arial'; pipCtx.fillText(timer.sub.toUpperCase(), 150, 125);
-            requestAnimationFrame(updatePiP);
-        }
 
         function syncStreak() {
             if (window.isLocalMode || !window.user) { els.streak.innerText = (JSON.parse(localStorage.getItem('akta_streak')) || { count: 0 }).count; } 

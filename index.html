@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AKTA - Pro Study Tracker (Cloud Synced)</title>
+    <title>AKTA - Pro Study Tracker & Streak</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,7 +38,6 @@
             z-index: -1;
         }
 
-        /* Navbar as*/
         .navbar {
             backdrop-filter: blur(var(--bg-blur));
             background: rgba(15, 23, 42, 0.4);
@@ -82,7 +81,6 @@
             letter-spacing: 2px; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 8px;
         }
 
-        /* Timer Circle */
         .timer-circle-wrap {
             display: flex; flex-direction: column; align-items: center; margin: 1rem 0;
         }
@@ -122,6 +120,7 @@
             padding: 0.8rem 2.5rem; background: linear-gradient(135deg, var(--accent), #3b82f6);
             border: none; border-radius: 50px; color: white; font-weight: 700; font-size: 14px;
             cursor: pointer; box-shadow: 0 8px 20px var(--accent-glow); transition: 0.3s;
+            display: flex; align-items: center; justify-content: center;
         }
         .btn-outline {
             padding: 0.7rem 1.2rem; background: var(--glass-highlight); border: 1px solid var(--glass-border);
@@ -129,7 +128,6 @@
             font-size: 12px;
         }
 
-        /* Lists */
         .subject-item, .todo-item {
             display: flex; align-items: center; gap: 10px; padding: 0.8rem;
             background: rgba(255,255,255,0.03); border-radius: 16px; margin-bottom: 0.6rem;
@@ -149,16 +147,17 @@
         .floating-window {
             position: fixed; bottom: 30px; right: 30px; width: 220px;
             background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px) saturate(180%);
-            -webkit-backdrop-filter: blur(12px) saturate(180%);
+            backdrop-filter: blur(15px) saturate(180%);
+            -webkit-backdrop-filter: blur(15px) saturate(180%);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 24px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); 
             display: none; z-index: 10000;
-            padding: 1rem; cursor: grab; transition: height 0.3s ease, background 0.3s ease;
+            padding: 1rem; cursor: grab; transition: height 0.3s ease;
             overflow: hidden;
         }
         .floating-window.active { display: block; }
+        .floating-window:active { cursor: grabbing; background: rgba(255, 255, 255, 0.1); }
 
         .mini-tasks-container {
             margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);
@@ -186,17 +185,14 @@
             pointer-events: none; z-index: 25000;
         }
 
-        /* Connecting Fallback Button */
         #retrySyncBtn {
-            display: none;
-            margin-top: 5px;
-            font-size: 9px;
-            background: var(--danger);
-            border: none;
-            color: white;
-            padding: 2px 6px;
-            border-radius: 4px;
-            cursor: pointer;
+            display: none; margin-top: 5px; font-size: 9px; background: var(--danger);
+            border: none; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;
+        }
+
+        /* Hidden Video for PiP Mode */
+        #pipVideo {
+            position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
         }
 
         @media (max-width: 1024px) { .main-container { grid-template-columns: 1fr; } }
@@ -205,6 +201,9 @@
 <body>
 
     <canvas id="confettiCanvas"></canvas>
+    <!-- Video and Canvas for Floating PiP Mode -->
+    <video id="pipVideo" autoplay muted playsinline></video>
+    <canvas id="pipCanvas" width="300" height="150" style="display:none;"></canvas>
 
     <!-- Notification Overlay -->
     <div id="notification-overlay" class="modal">
@@ -264,7 +263,7 @@
                         <button class="time-adjust-btn" onclick="app.adjustTime(5)">+</button>
                     </div>
 
-                    <div style="display: flex; gap: 15px;">
+                    <div style="display: flex; gap: 15px; justify-content: center;">
                         <button class="btn-primary" id="startBtn" onclick="app.toggleTimer()">START</button>
                         <button class="btn-outline" onclick="app.resetTimer()">RESET</button>
                     </div>
@@ -304,7 +303,7 @@
                         <div style="font-size: 9px; color: var(--text-secondary);">SESSIONS</div>
                     </div>
                     <div style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 16px; text-align: center; border: 1px solid var(--glass-border);">
-                        <div id="statHrs" style="font-size: 22px; font-weight: 700;">0</div>
+                        <div id="statHrs" style="font-size: 22px; font-weight: 700;">0.0</div>
                         <div style="font-size: 9px; color: var(--text-secondary);">HOURS</div>
                     </div>
                 </div>
@@ -322,7 +321,7 @@
         </div>
     </div>
 
-    <!-- Mini Mode -->
+    <!-- Mini Mode Window -->
     <div class="floating-window" id="floatWin">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 9px; font-weight: 800; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
             <span>MINI MODE</span>
@@ -331,7 +330,12 @@
         <div id="miniTimerSection" style="text-align: center;">
             <div id="floatTimer" style="font-family: 'JetBrains Mono'; font-size: 38px; font-weight: 700; color: white; margin-bottom: 5px; text-shadow: 0 0 10px rgba(6,182,212,0.8);">25:00</div>
             <div id="floatSub" style="font-size: 9px; color: #e2e8f0; margin-bottom: 10px; font-weight: 600;">GENERAL</div>
-            <button class="btn-primary" style="width: 100%; padding: 0.5rem; justify-content: center; background: rgba(6, 182, 212, 0.6); border: 1px solid rgba(255,255,255,0.2);" onclick="app.toggleTimer()" id="floatPlay">START</button>
+            
+            <div style="display: flex; gap: 5px;">
+                <button class="btn-primary" style="flex: 1; padding: 0.5rem; background: rgba(6, 182, 212, 0.6);" onclick="app.toggleTimer()" id="floatPlay">START</button>
+                <!-- PiP Button -->
+                <button class="btn-outline" style="padding: 0.5rem; border-radius: 12px;" onclick="app.togglePiP()" title="Always on Top (Pop out)">📺</button>
+            </div>
         </div>
         <div id="miniTasksSection" class="mini-tasks-container">
             <div id="miniTaskList"></div>
@@ -377,21 +381,18 @@
             projectId: "safelivebakerypos",
             storageBucket: "safelivebakerypos.firebasestorage.app",
             messagingSenderId: "158134703948",
-            appId: "1:158134703948:web:39cd3936bc622a86d861e9"
+            appId: "1:158134703948:web:39cd3936bc622a86d861e9",
+            measurementId: "G-PQCZZCCBFC"
         };
 
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userFirebaseConfig;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'akta-pro-local-sync-v2';
+        const appId = 'akta-study-pro-final';
 
-        let user = null;
-        let db = null;
-        let isLocalMode = false;
-        let connTimeout = null;
-
+        let user = null; let db = null; let isLocalMode = false; let connTimeout = null;
         const getLocal = (key) => JSON.parse(localStorage.getItem(`akta_${key}`)) || [];
         const saveLocal = (key, data) => localStorage.setItem(`akta_${key}`, JSON.stringify(data));
 
-        const quotes = ["The secret of getting ahead is getting started.", "Dream it. Wish it. Do it.", "Focus on being productive instead of busy."];
+        const quotes = ["Study now, be proud later.", "Dream it. Wish it. Do it.", "Stay focused and never give up."];
         let timer = { mode: 'pomodoro', timeLeft: 25 * 60, initialSecs: 25 * 60, isRunning: false, intv: null, sub: 'General', goal: 120 };
 
         const els = {
@@ -400,98 +401,76 @@
             quote: document.getElementById('quoteDisplay'), streak: document.getElementById('streakVal'),
             canvas: document.getElementById('confettiCanvas'), miniTasks: document.getElementById('miniTasksSection'),
             authDot: document.getElementById('authDot'), authText: document.getElementById('authText'),
-            retryBtn: document.getElementById('retrySyncBtn')
+            retryBtn: document.getElementById('retrySyncBtn'),
+            pipVideo: document.getElementById('pipVideo'),
+            pipCanvas: document.getElementById('pipCanvas')
         };
 
-        // Fallback Logic
         window.switchToLocalMode = (msg) => {
-            clearTimeout(connTimeout);
-            isLocalMode = true;
-            els.authText.innerText = msg;
-            els.authDot.style.background = "#f59e0b";
-            els.retryBtn.style.display = "none";
-            syncStreak();
-            loadLocalData();
+            clearTimeout(connTimeout); isLocalMode = true;
+            els.authText.innerText = msg; els.authDot.style.background = "#f59e0b";
+            els.retryBtn.style.display = "none"; syncStreak(); loadLocalData();
         };
 
-        // --- INITIALIZATION ---
         const startApp = async () => {
-            // Check for connection timeout
-            connTimeout = setTimeout(() => {
-                if (!user && !isLocalMode) {
-                    els.retryBtn.style.display = "inline-block";
-                    els.authText.innerText = "Sync Hanging...";
-                }
-            }, 5000);
-
-            if (!navigator.onLine || !firebaseConfig) {
-                switchToLocalMode("Local Mode (Offline)");
-                return;
-            }
-
+            connTimeout = setTimeout(() => { if (!user && !isLocalMode) { els.retryBtn.style.display = "inline-block"; els.authText.innerText = "Check Connection..."; } }, 7000);
+            if (!navigator.onLine) { switchToLocalMode("Local Mode (Offline)"); return; }
             try {
                 const fbApp = initializeApp(firebaseConfig);
-                const auth = getAuth(fbApp);
-                db = getFirestore(fbApp);
-
-                onAuthStateChanged(auth, (u) => {
-                    if (u) {
-                        clearTimeout(connTimeout);
-                        user = u;
-                        els.authDot.style.background = '#10b981';
-                        els.authText.innerText = "Cloud Synced";
-                        els.retryBtn.style.display = "none";
-                        syncStreak();
-                        loadRealtimeData();
-                    }
-                });
-
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth).catch(err => {
-                        console.error("Auth error:", err);
-                        switchToLocalMode("Auth Error (Check Firebase Console)");
-                    });
-                }
-            } catch (err) {
-                switchToLocalMode("Connection Error");
-            }
+                const auth = getAuth(fbApp); db = getFirestore(fbApp);
+                onAuthStateChanged(auth, (u) => { if (u) { clearTimeout(connTimeout); user = u; els.authDot.style.background = '#10b981'; els.authText.innerText = "Cloud Synced"; els.retryBtn.style.display = "none"; syncStreak(); loadRealtimeData(); } });
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await signInWithCustomToken(auth, __initial_auth_token); } 
+                else { await signInAnonymously(auth).catch(() => switchToLocalMode("Auth Error")); }
+            } catch (err) { switchToLocalMode("Sync Error"); }
         };
-
         startApp();
 
-        // Confetti
-        const confetti = {
-            particles: [], colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'], isRunning: false, ctx: null,
-            init() { this.ctx = els.canvas.getContext('2d'); window.addEventListener('resize', () => this.resize()); this.resize(); },
-            resize() { els.canvas.width = window.innerWidth; els.canvas.height = window.innerHeight; },
-            spawn() {
-                this.particles = [];
-                for (let i = 0; i < 80; i++) {
-                    this.particles.push({
-                        x: Math.random() * els.canvas.width, y: Math.random() * els.canvas.height - els.canvas.height,
-                        size: Math.random() * 8 + 4, color: this.colors[Math.floor(Math.random() * this.colors.length)],
-                        speed: Math.random() * 3 + 2, angle: Math.random() * 360, rotationSpeed: Math.random() * 10 - 5
-                    });
-                }
-            },
-            start() { if (this.isRunning) return; this.spawn(); this.isRunning = true; this.animate(); setTimeout(() => this.isRunning = false, 3500); },
-            animate() {
-                if (!this.isRunning && this.particles.length === 0) { this.ctx.clearRect(0, 0, els.canvas.width, els.canvas.height); return; }
-                this.ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
-                for (let i = 0; i < this.particles.length; i++) {
-                    let p = this.particles[i]; p.y += p.speed; p.angle += p.rotationSpeed;
-                    this.ctx.save(); this.ctx.translate(p.x, p.y); this.ctx.rotate(p.angle * Math.PI / 180);
-                    this.ctx.fillStyle = p.color; this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); this.ctx.restore();
-                    if (p.y > els.canvas.height) { if (this.isRunning) { p.y = -20; p.x = Math.random() * els.canvas.width; } else { this.particles.splice(i, 1); i--; } }
-                }
-                requestAnimationFrame(() => this.animate());
-            }
-        };
-        confetti.init();
+        // PiP Floating Logic
+        const pipCtx = els.pipCanvas.getContext('2d');
+        function updatePiP() {
+            if (!document.pictureInPictureElement) return;
+            const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
+            const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
+            
+            // Draw to Canvas
+            pipCtx.fillStyle = '#020617';
+            pipCtx.fillRect(0, 0, 300, 150);
+            pipCtx.fillStyle = '#06b6d4';
+            pipCtx.font = 'bold 80px Courier New';
+            pipCtx.textAlign = 'center';
+            pipCtx.fillText(`${m}:${s}`, 150, 85);
+            pipCtx.font = 'bold 20px Arial';
+            pipCtx.fillText(timer.sub.toUpperCase(), 150, 125);
+            
+            requestAnimationFrame(updatePiP);
+        }
 
         window.app = {
+            togglePiP: async () => {
+                try {
+                    if (document.pictureInPictureElement) {
+                        await document.exitPictureInPicture();
+                    } else {
+                        // Create stream if not exists
+                        if (!els.pipVideo.srcObject) {
+                            const stream = els.pipCanvas.captureStream(30);
+                            els.pipVideo.srcObject = stream;
+                        }
+                        
+                        // Wait for metadata to be ready to avoid Error: Metadata not loaded
+                        await new Promise((resolve) => {
+                            if (els.pipVideo.readyState >= 1) resolve();
+                            else els.pipVideo.onloadedmetadata = resolve;
+                        });
+
+                        await els.pipVideo.play();
+                        await els.pipVideo.requestPictureInPicture();
+                        updatePiP();
+                    }
+                } catch (e) {
+                    console.error("PiP failed", e);
+                }
+            },
             updateUI: () => {
                 const m = Math.floor(Math.abs(timer.timeLeft) / 60).toString().padStart(2, '0');
                 const s = (Math.abs(timer.timeLeft) % 60).toString().padStart(2, '0');
@@ -551,7 +530,16 @@
             closeMini: () => { document.getElementById('floatWin').classList.remove('active'); }
         };
 
-        // Mini Mode Drag
+        const confetti = {
+            particles: [], colors: ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'], isRunning: false, ctx: null,
+            init() { this.ctx = document.getElementById('confettiCanvas').getContext('2d'); window.addEventListener('resize', () => this.resize()); this.resize(); },
+            resize() { const c = document.getElementById('confettiCanvas'); c.width = window.innerWidth; c.height = window.innerHeight; },
+            spawn() { this.particles = []; for (let i = 0; i < 80; i++) { this.particles.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight - window.innerHeight, size: Math.random() * 8 + 4, color: this.colors[Math.floor(Math.random() * this.colors.length)], speed: Math.random() * 3 + 2, angle: Math.random() * 360, rotationSpeed: Math.random() * 10 - 5 }); } },
+            start() { if (this.isRunning) return; this.spawn(); this.isRunning = true; this.animate(); setTimeout(() => this.isRunning = false, 3500); },
+            animate() { if (!this.isRunning && this.particles.length === 0) { this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); return; } this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); for (let i = 0; i < this.particles.length; i++) { let p = this.particles[i]; p.y += p.speed; p.angle += p.rotationSpeed; this.ctx.save(); this.ctx.translate(p.x, p.y); this.ctx.rotate(p.angle * Math.PI / 180); this.ctx.fillStyle = p.color; this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); this.ctx.restore(); if (p.y > window.innerHeight) { if (this.isRunning) { p.y = -20; p.x = Math.random() * window.innerWidth; } else { this.particles.splice(i, 1); i--; } } } requestAnimationFrame(() => this.animate()); }
+        };
+        confetti.init();
+
         const floatWin = document.getElementById('floatWin');
         let isMoving = false, ox, oy;
         floatWin.onmousedown = (e) => { if(e.target.tagName === 'BUTTON') return; isMoving = true; ox = e.clientX - floatWin.offsetLeft; oy = e.clientY - floatWin.offsetTop; };
@@ -562,10 +550,7 @@
 
         async function syncStreak() {
             if (isLocalMode) { els.streak.innerText = (JSON.parse(localStorage.getItem('akta_streak')) || { count: 0 }).count; } 
-            else if (user) { 
-                const snap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'streak')).catch(()=>null);
-                if (snap && snap.exists()) els.streak.innerText = snap.data().count; 
-            }
+            else if (user) { const snap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'streak')).catch(()=>null); if (snap && snap.exists()) els.streak.innerText = snap.data().count; }
         }
 
         function incrementStreakLocal() {
@@ -594,9 +579,11 @@
                     if(isMini) div.style.background = "rgba(255,255,255,0.1)";
                     div.innerHTML = `<span style="flex:1; font-size:${isMini ? '11px' : '13px'}; cursor:pointer; color:white; font-weight:500; ${t.done ? 'text-decoration:line-through; opacity:0.5' : ''}">${t.text}</span>${!isMini ? '<button class="delete-btn">×</button>' : ''}`;
                     div.onclick = async () => {
-                        t.done = !t.done; if (t.done) { confetti.start(); document.getElementById('taskBeep').currentTime = 0; document.getElementById('taskBeep').play().catch(()=>{}); }
+                        const sfx = document.getElementById('taskBeep'); 
+                        if (!t.done) { confetti.start(); sfx.currentTime = 0; sfx.play().catch(()=>{}); }
+                        t.done = !t.done;
                         if (isLocalMode) { saveLocal('tasks', tasks); loadLocalData(); }
-                        else await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', t.id), { done: t.done }).catch(err => switchToLocalMode("Permission Error (Sync Failed)"));
+                        else await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', t.id), { done: t.done });
                     };
                     if(!isMini) div.querySelector('.delete-btn').onclick = (e) => { e.stopPropagation(); window.app.deleteTask(t.id); };
                     return div;
@@ -617,10 +604,10 @@
         }
 
         function renderHistory(history) {
-            let todayMins = 0, totalHrs = 0, sessCount = history.length;
+            let todayMins = 0, totalHrs = 0;
             const today = new Date().toISOString().split('T')[0]; const map = {};
             history.forEach(h => { totalHrs += (h.duration / 60); if (h.date === today) todayMins += h.duration; map[h.date] = (map[h.date] || 0) + h.duration; });
-            document.getElementById('statSess').innerText = sessCount; document.getElementById('statHrs').innerText = totalHrs.toFixed(1);
+            document.getElementById('statSess').innerText = history.length; document.getElementById('statHrs').innerText = totalHrs.toFixed(1);
             document.getElementById('goalText').innerText = `${todayMins} / ${timer.goal} min`;
             document.getElementById('goalBar').style.width = Math.min((todayMins/timer.goal)*100, 100) + '%';
             const grid = document.getElementById('actGrid'); grid.innerHTML = '';
@@ -632,15 +619,16 @@
         }
 
         function loadLocalData() { renderTasks(getLocal('tasks')); renderSubjects(getLocal('subjects')); renderHistory(getLocal('history')); }
-        
         function loadRealtimeData() {
             if(!db || !user) return;
-            const errorFn = (err) => { console.error("Firestore error:", err); switchToLocalMode("Cloud Permission Denied"); };
-            onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'), orderBy('createdAt', 'desc')), (s) => { const tasks = []; s.forEach(d => tasks.push({ ...d.data(), id: d.id })); renderTasks(tasks); }, errorFn);
-            onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'subjects'), (s) => { const subs = []; s.forEach(d => subs.push({ ...d.data(), id: d.id })); renderSubjects(subs); }, errorFn);
-            onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'history'), (s) => { const hist = []; s.forEach(d => hist.push({ ...d.data(), id: d.id })); renderHistory(hist); }, errorFn);
+            onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'), orderBy('createdAt', 'desc')), (s) => { const tasks = []; s.forEach(d => tasks.push({ ...d.data(), id: d.id })); renderTasks(tasks); });
+            onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'subjects'), (s) => { const subs = []; s.forEach(d => subs.push({ ...d.data(), id: d.id })); renderSubjects(subs); });
+            onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'history'), (s) => { const hist = []; s.forEach(d => hist.push({ ...d.data(), id: d.id })); renderHistory(hist); });
         }
         window.app.updateUI();
+    </script>
+</body>
+</html>
     </script>
 </body>
 </html>

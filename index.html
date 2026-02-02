@@ -410,8 +410,8 @@
             openFloatingWindow: async () => {
                 if ('documentPictureInPicture' in window) {
                     try {
-                        // Start with a small size
-                        pipWindow = await window.documentPictureInPicture.requestWindow({ width: 300, height: 200 });
+                        // SIZE CHOTO KORA HOLO (Width: 260px, Height: 160px for Timer Only)
+                        pipWindow = await window.documentPictureInPicture.requestWindow({ width: 260, height: 160 });
                         
                         // Copy styles
                         [...document.styleSheets].forEach((styleSheet) => {
@@ -423,52 +423,66 @@
                             } catch (e) {}
                         });
 
-                        pipWindow.document.body.style.background = '#020617';
+                        // GLASS EFFECT STYLES FOR PIP WINDOW
+                        pipWindow.document.body.style.background = 'rgba(15, 23, 42, 0.4)';
+                        pipWindow.document.body.style.backdropFilter = 'blur(12px)';
                         pipWindow.document.body.style.margin = '0';
-                        pipWindow.document.body.style.padding = '15px';
+                        pipWindow.document.body.style.padding = '10px';
                         pipWindow.document.body.style.display = 'flex';
                         pipWindow.document.body.style.flexDirection = 'column';
-                        pipWindow.document.body.style.overflowX = 'hidden';
+                        pipWindow.document.body.style.overflow = 'hidden';
+                        pipWindow.document.body.style.height = '100%';
 
                         const content = pipWindow.document.createElement('div');
+                        content.id = "pip-root";
+                        content.style.height = "100%";
+                        content.style.display = "flex";
+                        content.style.flexDirection = "column";
                         content.innerHTML = `
-                            <div id="pip-header" style="text-align: center; cursor: pointer; user-select: none;">
-                                <div id="pip-sub" style="font-size: 10px; color: #06b6d4; font-weight: 800; margin-bottom: 5px;">${timer.sub.toUpperCase()}</div>
-                                <div id="pip-display" style="font-family: 'JetBrains Mono', monospace; font-size: 55px; font-weight: 700; color: white; line-height: 1;">${els.display.innerText}</div>
-                                <div style="font-size: 8px; color: #94a3b8; margin-top: 5px;">Double click to expand tasks</div>
-                                <div style="margin-top: 15px; display: flex; gap: 8px; justify-content: center;">
-                                    <button id="pip-toggle" style="background: #06b6d4; border: none; color: white; padding: 8px 20px; border-radius: 50px; font-weight: 700; cursor: pointer; font-size: 12px;">START</button>
+                            <div id="pip-header" style="text-align: center; cursor: pointer; user-select: none; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); transition: 0.3s; flex-shrink: 0; backdrop-filter: blur(5px);">
+                                <div id="pip-sub" style="font-size: 9px; color: #06b6d4; font-weight: 800; margin-bottom: 2px; letter-spacing: 1px;">${timer.sub.toUpperCase()}</div>
+                                <!-- TIMER TEXT BORO KORA HOLO (75px) -->
+                                <div id="pip-display" style="font-family: 'JetBrains Mono', monospace; font-size: 75px; font-weight: 700; color: white; line-height: 0.9;">${els.display.innerText}</div>
+                                <div style="font-size: 7px; color: #94a3b8; margin-top: 4px; opacity: 0.5;">DBL CLICK TO EXPAND</div>
+                                <div style="margin-top: 10px; display: flex; gap: 6px; justify-content: center;">
+                                    <button id="pip-toggle" style="background: #06b6d4; border: none; color: white; padding: 6px 20px; border-radius: 50px; font-weight: 700; cursor: pointer; font-size: 10px; box-shadow: 0 4px 10px rgba(6,182,212,0.3);">START</button>
                                 </div>
                             </div>
-                            <div id="pip-tasks-section" style="display: none; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                                <div style="font-size: 10px; color: #94a3b8; margin-bottom: 10px; font-weight: 800; letter-spacing: 1px;">QUICK TASKS</div>
-                                <div id="pip-task-list"></div>
+                            <div id="pip-tasks-section" style="display: none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; flex-grow: 1; overflow-y: auto;">
+                                <div style="font-size: 8px; color: #06b6d4; margin-bottom: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">Tasks</div>
+                                <div id="pip-task-list" style="padding-bottom: 5px;"></div>
                             </div>
                         `;
                         pipWindow.document.body.appendChild(content);
 
-                        // Attach Event Listeners
-                        pipWindow.document.getElementById('pip-toggle').onclick = (e) => { e.stopPropagation(); window.app.toggleTimer(); };
-                        
-                        // TOGGLE EXPAND LOGIC (Like Mini Mode)
+                        // PIP Task Toggle Logic (Double Click)
                         pipWindow.document.getElementById('pip-header').ondblclick = () => {
                             const taskSec = pipWindow.document.getElementById('pip-tasks-section');
-                            const isExpanded = taskSec.style.display === 'block';
-                            taskSec.style.display = isExpanded ? 'none' : 'block';
+                            const isHidden = taskSec.style.display === 'none';
                             
-                            // Window resize hints (Document PiP windows are user-resizable, but we can update content)
+                            if (isHidden) {
+                                taskSec.style.display = 'block';
+                                pipWindow.resizeTo(300, 450); // Resize to show tasks
+                            } else {
+                                taskSec.style.display = 'none';
+                                pipWindow.resizeTo(260, 160); // Back to timer size
+                            }
+                            renderTasks(lastLoadedTasks);
+                        };
+
+                        pipWindow.document.getElementById('pip-toggle').onclick = (e) => {
+                            e.stopPropagation();
+                            window.app.toggleTimer();
                         };
                         
-                        // Initial Task Load for PiP
                         renderTasks(lastLoadedTasks);
-                        
                         pipWindow.onpagehide = () => { pipWindow = null; };
 
                     } catch (e) {
                         console.error("Document PiP failed", e);
                     }
                 } else {
-                    alert("PRO FLOAT requires a modern browser like Google Chrome or Microsoft Edge.");
+                    alert("PRO FLOAT requires Google Chrome or Microsoft Edge.");
                 }
             },
             updateUI: () => {
@@ -532,15 +546,13 @@
             },
             deleteTask: async (id) => { if (window.isLocalMode || !window.user) { saveLocal('tasks', getLocal('tasks').filter(t => t.id !== id)); loadLocalData(); } else if (window.firebaseFns.deleteDoc && window.db) { await window.firebaseFns.deleteDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'tasks', id)); } },
             toggleTaskStatus: async (t) => {
-                if (!t.done) { confetti.start(); document.getElementById('taskBeep').currentTime = 0; document.getElementById('taskBeep').play().catch(()=>{}); }
-                const newDone = !t.done;
+                const isDone = !t.done;
+                if (isDone) { confetti.start(); document.getElementById('taskBeep').currentTime = 0; document.getElementById('taskBeep').play().catch(()=>{}); }
                 if (window.isLocalMode || !window.user) { 
-                    const tasks = getLocal('tasks');
-                    const updated = tasks.map(item => item.id === t.id ? {...item, done: newDone} : item);
-                    saveLocal('tasks', updated); 
-                    loadLocalData(); 
+                    const tasks = getLocal('tasks').map(item => item.id === t.id ? {...item, done: isDone} : item);
+                    saveLocal('tasks', tasks); loadLocalData(); 
                 }
-                else if (window.firebaseFns.updateDoc && window.db) await window.firebaseFns.updateDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'tasks', t.id), { done: newDone });
+                else if (window.firebaseFns.updateDoc && window.db) await window.firebaseFns.updateDoc(window.firebaseFns.doc(window.db, 'artifacts', appId, 'users', window.user.uid, 'tasks', t.id), { done: isDone });
             },
             saveSub: async () => {
                 const name = document.getElementById('newSubInp').value.toUpperCase().trim(); if (!name) return;
@@ -589,17 +601,20 @@
             if(pipList) pipList.innerHTML = '';
 
             tasks.forEach(t => {
-                const createTaskItem = (mode) => {
-                    const div = (mode === 'pip' && pipWindow) ? pipWindow.document.createElement('div') : document.createElement('div');
+                const createTaskItem = (renderMode) => {
+                    const docToUse = (renderMode === 'pip' && pipWindow) ? pipWindow.document : document;
+                    const div = docToUse.createElement('div');
                     div.className = `todo-item ${t.done ? 'task-done' : ''}`;
                     
-                    if(mode === 'mini') div.style.background = "rgba(255,255,255,0.1)";
-                    if(mode === 'pip') div.style.cssText = `display:flex; align-items:center; gap:8px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);`;
+                    if(renderMode === 'mini') div.style.background = "rgba(255,255,255,0.1)";
+                    if(renderMode === 'pip') {
+                        div.style.cssText = `display:flex; align-items:center; gap:8px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; margin-bottom:6px; border:1px solid rgba(255,255,255,0.1); cursor:pointer; color:white;`;
+                    }
 
-                    div.innerHTML = `<span style="flex:1; font-size:${mode === 'main' ? '13px' : '11px'}; cursor:pointer; color:white; font-weight:500; ${t.done ? 'text-decoration:line-through; opacity:0.5' : ''}">${t.text}</span>${mode === 'main' ? '<button class="delete-btn">×</button>' : ''}`;
+                    div.innerHTML = `<span style="flex:1; font-size:${renderMode === 'main' ? '13px' : '10px'}; cursor:pointer; color:inherit; font-weight:500; ${t.done ? 'text-decoration:line-through; opacity:0.5' : ''}">${t.text}</span>${renderMode === 'main' ? '<button class="delete-btn">×</button>' : ''}`;
                     
                     div.onclick = () => window.app.toggleTaskStatus(t);
-                    if(mode === 'main') div.querySelector('.delete-btn').onclick = (e) => { e.stopPropagation(); window.app.deleteTask(t.id); };
+                    if(renderMode === 'main') div.querySelector('.delete-btn').onclick = (e) => { e.stopPropagation(); window.app.deleteTask(t.id); };
                     
                     return div;
                 };
